@@ -65,7 +65,7 @@ export default class Engine
         let mapped = Engine.ENUMS.Entities[entity];
         let obj = new mapped.Type(data);
         Engine.FakeDB[mapped.Pluralized].push(obj);
-
+        console.log(obj);
         let response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Success, obj);
         return response;
     }
@@ -157,21 +157,30 @@ export default class Engine
     {
         let response;
         try {
-            let account = await Engine.Create(Engine.DICTIONARY.Entities.Account, data);
-            if (account)
+            let existingAccount = Engine.FUNCTIONS.FindEntityByID(Engine.DICTIONARY.Entities.Account, data.Email, "Email");
+            if (existingAccount)
             {
-                let member = await Engine.Create(Engine.DICTIONARY.Entities.Member, {MemberID: account.Data.MemberID});
-                let session = await Engine.Authenticate(account.Data.AccountID);
-                if (session)
+                response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Error, "Email already exists");
+            }
+            else
+            {
+                let account = await Engine.Create(Engine.DICTIONARY.Entities.Account, data);
+                if (account)
                 {
-                    let obj = {Member: member.Data, Session: session.Data};
-                    response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Success, obj);
-                }
-                else
-                {
-                    response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Error, "Could not register account");
+                    let member = await Engine.Create(Engine.DICTIONARY.Entities.Member, {MemberID: account.Data.MemberID});
+                    let session = await Engine.Authenticate(account.Data.AccountID);
+                    if (session)
+                    {
+                        let obj = {Member: member.Data, Session: session.Data};
+                        response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Success, obj);
+                    }
+                    else
+                    {
+                        response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Error, "Could not register account");
+                    }
                 }
             }
+            
         } catch (e) {
             response = Engine.CreateResponse(Engine.DICTIONARY.ResponseTypes.Error, e);
         }
@@ -235,9 +244,13 @@ export default class Engine
         let testUser = await Engine.Register({Email: "test@test.com", Password: "password"});
 
         //create forum category test
+        let category = await Engine.Create(Engine.DICTIONARY.Entities.ForumCategory, {});
 
         //create post by test user
-        console.log(testUser);
+        let post = await Engine.Create(Engine.DICTIONARY.Entities.ForumThread, {ForumCategoryID: category.Data.ForumCategoryID, MemberID: testUser.Data.Member.MemberID});
+
+        //create reply
+        let reply = await Engine.Create(Engine.DICTIONARY.Entities.ForumThreadReply, {ForumThreadID: post.Data.ForumThreadID, MemberID: testUser.Data.Member.MemberID});
     }
 }
 
@@ -377,7 +390,11 @@ class ForumThread
     {
         this.ForumThreadID = data.ForumThreadID || Utils.GetNewGUID();
         this.ForumCategoryID = data.ForumCategoryID || null;
+        this.MemberID = data.MemberID || null; //author
         this.Pinned = typeof(data.Pinned) == 'boolean' ? data.Pinned : false;
+        this.Subject = data.Subject || "Default Subject";
+        this.Content = data.Content || "Default Content";
+        this.VisibleTo = data.VisibleTo || []; //which ranks visible to. if array has none, all can see
         this.DateCreated = data.DateCreated || new Date();
     }
 }
@@ -388,6 +405,8 @@ class ForumThreadReply
     {
         this.ForumThreadReplyID = data.ForumThreadReplyID || Utils.GetNewGUID();
         this.ForumThreadID = data.ForumThreadID || null;
+        this.MemberID = data.MemberID || null; //author
+        this.Content = data.Content || "Default Reply";
         this.DateCreated = data.DateCreated || new Date();
     }
 }
